@@ -1,8 +1,10 @@
----
+getwd---
 title: "WOCLGOsum"
 author: "Ann McNichol"
 date: "7/27/2020"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -13,18 +15,169 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
-```{r cars}
-summary(cars)
+##Using DIC code to set up the Summary data; after this I'll be editing the code for WOCLGOsum
+#title: "Glodap DIC data"
+#output: html_notebook
+#editor_options: 
+  #chunk_output_type: inline
+---
+
+# Start the new project
+
+```{r}
+setwd("/Users/ann/github/WOCLGOsum")
+getwd()
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+library(tidyverse)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+#library(vroom)
+library(here)
+```
+
+Working with NOSAMS/GLODAP merge
+
+Load the data. 
+
+```{r}
+# Load using read_csv
+nos_glo <- read_csv("data/nosams_glodap.csv")
+field_dup <- read_csv("data/field_dups.csv")
+lab_dup <- read_csv("data/recnum_dups.csv")
+```
+
+
+Select all Atlantic; sort by collection_date
+
+```{r}
+Atlantic <- filter(nos_glo,str_detect(whpid, "^A"))
+```
+
+Add a new column with the collection year only
+
+Try to just extract the year from the data and then work on mutate.
+
+
+
+```{r}
+Atlantic <- Atlantic %>%
+  mutate(coll_yr = (format(as.Date(Atlantic$collection_date, format="%Y-%m-%d"),"%Y")))
+```
+
+```{r}
+Atl_datesort <- Atlantic[order(Atlantic$collection_date),]
+```
+
+Group Atlantic data by cruise and find number of data points for each cruise. This will be a tough one!
+
+
+```{r}
+head(Atl_datesort)
+```
+
+```{r}
+Atl_crcount <- count(Atlantic, expocode, whpid, coll_yr)
+
+write_csv(Atl_crcount, here("data/Atl_crcount.csv"))
+```
+
+Start collecting the field/lab dups from the WOCE Atlantic data
+Step 1: Collect Atlantic cruises from field_dup and lab_dup
+
+```{r}
+field_dup_At <- filter(field_dup,str_detect(whpid, "^A"))
+lab_dup_At <- filter(lab_dup, str_detect(whpid, "^A"))
+```
+
+Step 2: Sort by year
+
+```{r}
+filed_dup_At <- field_dup_At %>%
+  mutate(coll_yr = (format(as.Date(field_dup_At$collection_date, format="%Y-%m-%d"),"%Y")))
+
+lab_dup_At <- lab_dup_At %>%
+  mutate(coll_yr = (format(as.Date(lab_dup_At$collection_date, format="%Y-%m-%d"),"%Y")))
+
+write_csv(filed_dup_At, here("data/filed_dup_At.csv"))
+write_csv(lab_dup_At, here("data/lab_dup_At.csv"))
+```
+
+Find the RNs of samples that have a "6" flag, i.e. dups to see what was deposited in the database.
+
+```{r}
+Atl_glo_dups <- filter(Atlantic, c13f == 9)
+
+```
+
+```{r}
+nos_glo_dups <- filter(nos_glo, c14f == 6)
+
+```
+There are no samples in nos_glo with a flag of 6. What does this mean? Just for the record,
+
+Atlantic has 1749 observations with a c14f of 2, and 9 with a flag of 9, 1480 observations with a c13f of 1480 and 276 with a flag of 276. So, perhaps instead of using the GLODAP database for this part of the project, I need to use the original files for each cruise. Bummer!
+
+
+DON'T run the code below. It's pulling all the data and not just the dups. Not sure what I was doing here. 
+```{r}
+lab_dup <- read_csv("/Users/ann/github/SuessEffect/data/nosams_clivar.csv")
+```
+
+I'm going to start with the A16N files deposited in the global databases, figure out which samples had flags of 6, and then link those to the NOSAMS results. Challenging but maybe I can do it. I'm sure I'll need help from Brett.
+
+Need to import cchdo file (/Users/ann/documents/word files/Projects/WOCE_summary/Atlantic/WOCE/A16>cchdo_3175MB93/5_317519930704_hy.csv). I'm stripping the notes, renaming it, and moving it to the data folder in WOCLGOsum project.
+
+```{r}
+# Load using read_csv
+A16N_cchdo <- read_csv("data/A16N_317519930704_hy1.csv")
+
+```
+
+Find the dups. How do I get the dups for both 14C and 13C? Start with 14C.
+
+```{r}
+A16N_dups <- filter(A16N_cchdo, DELC14_FLAG_W == 6)
+
+```
+
+For this cruise, UW did the 13C analyses so there are different 13C and 14C dups. I'll start working with the 14C dups and see how to link the NOSAMS and CCHDO results. 
+
+Whoops, A16 is a cruise that UW did and I don't have info for the gas samples, damn. I'll go back and start working with A20 which should have the data. 
+
+```{r}
+# Load using read_csv
+A20_cchdo <- read_csv("data/a20_hy1.csv", na = c("NA", "-999.0"))
+A20_dups <- filter(A20_cchdo, DELC14_FLAG_W == 6)
+A20_dups_13 <- filter(A20_cchdo, DELC13_FLAG_W == 6)
+```
+Now need to load the Atlantic files from NOSAMS. 
+
+```{r}
+nosams_cl <- read_csv("/Users/ann/github/SuessEffect/data/nosams_clivar.csv")
+```
+
+Now to try and join the cchdo data with NOSAMS files. Get the link from Brett's code in the Suess project. Below is Brett's code for the GLODAP join. I need to modify it to join the cchdo and nosams data. 
+
+Brett's code: 
+***joined_dic <- left_join(nosams, glodap_dic, by = c("glodap" = "expocode", "station", "cast", "bottle"))
+write.csv(joined_dic, here("data/nosams_glodap.csv")) **** end of Brett's code
+
+Code below works but it is getting everything including samples that don't have carbon isotope measurements. Now need to figure out how to filter that in just one chunk or jsut pick out the samples with a flag of 6. 
+
+Do I need to change -999 values to NAs? 
+
+```{r}
+A20_cchdo <- read_csv("data/a20_hy1.csv", na = c("NA", "-999"))
+```
+
+```{r}
+A20_no_cl_join <- left_join(A20_cchdo, nosams_cl, by = c("EXPOCODE" = "expocode", "STNNBR" = "station", "CASTNO" = "cast"))
+write.csv(A20_no_cl_join, here("data/A20_no_cl_join.csv"))
+
+A20_dups_join <- filter(A20_no_cl_join, DELC14_FLAG_W == 6)
+write.csv(A20_dups_join, here("data/A20_no_cl_join.csv"))
+```
