@@ -150,7 +150,7 @@ Whoops, A16 is a cruise that UW did and I don't have info for the gas samples, d
 
 ```{r}
 # Load using read_csv
-A20_cchdo <- read_csv("data/a20_hy1.csv", na = c("NA", "-999.0"))
+A20_cchdo <- read_csv("data/a20_hy1.csv", na_if = c("DELC14", "-999.0"))
 A20_dups <- filter(A20_cchdo, DELC14_FLAG_W == 6)
 A20_dups_13 <- filter(A20_cchdo, DELC13_FLAG_W == 6)
 ```
@@ -171,13 +171,29 @@ Code below works but it is getting everything including samples that don't have 
 Do I need to change -999 values to NAs? 
 
 ```{r}
-A20_cchdo <- read_csv("data/a20_hy1.csv", na = c("NA", "-999"))
+A20_cchdo <- na_if(A20_cchdo, "-999")
 ```
 
 ```{r}
-A20_no_cl_join <- left_join(A20_cchdo, nosams_cl, by = c("EXPOCODE" = "expocode", "STNNBR" = "station", "CASTNO" = "cast"))
+A20_no_cl_join <- left_join(A20_cchdo, nosams_cl, by = c("SECT_ID" = "whpid", "STNNBR" = "station", "CASTNO" = "cast"))
 write.csv(A20_no_cl_join, here("data/A20_no_cl_join.csv"))
 
 A20_dups_join <- filter(A20_no_cl_join, DELC14_FLAG_W == 6)
 write.csv(A20_dups_join, here("data/A20_no_cl_join.csv"))
+```
+
+I need to convert the expocode in the NOSAMS database from 316N151/3 to 316N151/3. Perhaps, I'll first extract this subset of data and then change the value. 
+
+```{r}
+###extract the data for 1997 A20 cruise###
+  A20_nos <- filter(nosams_cl, str_detect(expocode, "316N151/3"))
+###convert the expocode to the proper value
+  A20_nos <- mutate(A20_nos, cc_expo = "316N151_3")
+###extract year from date in order to calculate D14C
+  A20_nos <- mutate(A20_nos,coll_yr = (format(as.Date(A20_nos$collection_date, format="%Y-%m-%d"),"%Y"))) +
+    A20_nos$coll_yr <- as.numeric(as.character(A20_nos$coll_yr))
+###Calculate D14C (seawater_dc14), need to define a variable
+  lambda14 <- 0.00012097
+  A20_nos.seawater_dc14 <- replace(A20_nos.seawater_dc14, A20_nos, (1000*(-1 + A20_nos$f_modern*exp(lambda14*(1950 - A20_nos$coll_yr)))))
+  
 ```
